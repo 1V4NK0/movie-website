@@ -34,7 +34,6 @@ export default function App() {
   }
 
   function debounce(callbackFunc, delay = 1000) {
-    console.log("waiting 1 second...");
     return (...args) => {
       setTimeout(() => {
         callbackFunc(...args);
