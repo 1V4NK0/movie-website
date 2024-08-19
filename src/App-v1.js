@@ -1,6 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import StarRating from "./StarRating";
 import _ from "lodash";
+import { useMovies } from "./useMovies";
+import { useLocalStorage } from "./useLocalStorage";
+import { useEscape, useKey } from "./useKey";
 
 const average = (arr) =>
   arr.reduce((acc, cur, i, arr) => acc + cur / arr.length, 0);
@@ -8,12 +11,11 @@ const average = (arr) =>
 const api = "17fc7b43";
 
 export default function App() {
-  const [movies, setMovies] = useState([]);
-  const [watched, setWatched] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(null);
+
+  const { movies, loading, error } = useMovies(query);
+  const [watched, setWatched] = useLocalStorage([], "watched");
 
   function handleDelete(movieToDelete) {
     setWatched((watched, i) =>
@@ -23,6 +25,7 @@ export default function App() {
 
   function handleAddWatched(movie) {
     setWatched((watched) => [...watched, movie]);
+    localStorage.setItem("watched", JSON.stringify([...watched, movie]));
   }
 
   function handleSelectMovie(id) {
@@ -32,45 +35,6 @@ export default function App() {
   function handleCloseMovie() {
     setSelectedId(null);
   }
-
-  function debounce(callbackFunc, delay = 1000) {
-    return (...args) => {
-      setTimeout(() => {
-        callbackFunc(...args);
-      }, delay);
-    };
-  }
-
-  useEffect(() => {
-    const fetchMoviesDebounced = debounce(async () => {
-      try {
-        setLoading(true);
-        setError("");
-        const res = await fetch(
-          `http://www.omdbapi.com/?i=tt3896198&apikey=${api}&s=${query}`
-        );
-
-        if (!res.ok) throw new Error("Something went wrong :(");
-
-        const data = await res.json();
-
-        if (data.Response === "False") throw new Error("Movie not found");
-
-        setMovies(data.Search);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    }, 1000);
-
-    if (query === "" || query.length < 3) {
-      setMovies([]);
-      return;
-    }
-
-    fetchMoviesDebounced();
-  }, [query]);
 
   return (
     <>
@@ -135,7 +99,6 @@ function MovieDetails({ selectedId, onClose, onAddWatched, watched }) {
   const watchedRating = watched.find(
     (movie) => movie.imdbID === selectedId
   )?.userRating;
-  console.log(isWatched);
 
   useEffect(() => {
     async function getMovieDetails() {
@@ -169,6 +132,16 @@ function MovieDetails({ selectedId, onClose, onAddWatched, watched }) {
     Genre: genre,
   } = movie;
 
+  useEffect(() => {
+    if (title) document.title = title;
+
+    return () => {
+      document.title = "ivanko TV";
+    };
+  }, [title]);
+
+  useKey(onClose, "Escape");
+
   function handleAdd() {
     const newWatchedMovie = {
       imdbID: selectedId,
@@ -179,11 +152,9 @@ function MovieDetails({ selectedId, onClose, onAddWatched, watched }) {
       runtime: Number(runtime.split(" ").at(0)),
       userRating,
     };
-
     onAddWatched(newWatchedMovie);
     onClose();
   }
-  //check id of the movie in the watched movies array if there is
   return (
     <>
       <div className="details">
@@ -249,6 +220,16 @@ function Logo() {
 }
 
 function Search({ query, setQuery }) {
+  const inputRef = useRef(null);
+
+  useKey(function () {
+    // Check if inputRef.current is defined before trying to focus
+    if (document.activeElement !== inputRef.current) {
+      inputRef.current.focus();
+      setQuery("");
+    }
+  }, "Enter");
+
   return (
     <input
       className="search"
@@ -256,9 +237,11 @@ function Search({ query, setQuery }) {
       placeholder="Search movies..."
       value={query}
       onChange={(e) => setQuery(e.target.value)}
+      ref={inputRef}
     />
   );
 }
+
 
 function NumResults({ movies }) {
   return (
